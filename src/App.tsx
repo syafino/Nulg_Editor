@@ -6,7 +6,7 @@ import { ScenePanel } from '@/ui/panels/ScenePanel'
 import { CameraPanel } from '@/ui/panels/CameraPanel'
 import { RenderPanel } from '@/ui/panels/RenderPanel'
 import { DEFAULT_SCENE } from '@/scene/defaults'
-import type { SceneSphere } from '@/scene/types'
+import type { ScenePrimitive } from '@/scene/types'
 import type { RenderSettings } from '@/gpu/renderer'
 
 export default function App() {
@@ -22,7 +22,7 @@ export default function App() {
   } = useRenderer(ctx, canvasRef.current)
 
   // Scene state
-  const [spheres, setSpheres] = useState<SceneSphere[]>(DEFAULT_SCENE.spheres)
+  const [primitives, setPrimitives] = useState<ScenePrimitive[]>(DEFAULT_SCENE.primitives)
   const [cameraState, setCameraState] = useState({
     pos: [0, 1, 5] as [number, number, number],
     yaw: Math.PI,
@@ -37,14 +37,14 @@ export default function App() {
 
   // Load default scene on mount
   useEffect(() => {
-    setScene(spheres)
+    setScene(primitives)
   }, [ctx]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync scene changes to GPU
   const handleSceneUpdate = useCallback(
-    (newSpheres: SceneSphere[]) => {
-      setSpheres(newSpheres)
-      setScene(newSpheres)
+    (newPrimitives: ScenePrimitive[]) => {
+      setPrimitives(newPrimitives)
+      setScene(newPrimitives)
     },
     [setScene],
   )
@@ -172,7 +172,7 @@ export default function App() {
           <h1 className="text-sm font-bold tracking-wide text-zinc-100">WebRay Editor</h1>
         </div>
         <div className="flex-1 overflow-y-auto">
-          <ScenePanel spheres={spheres} onUpdate={handleSceneUpdate} />
+          <ScenePanel primitives={primitives} onUpdate={handleSceneUpdate} />
         </div>
       </div>
 

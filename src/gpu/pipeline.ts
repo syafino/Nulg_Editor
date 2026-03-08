@@ -6,11 +6,13 @@ import { preprocessWGSL } from './shaders/preprocessor'
 import rayTracerSrc from './shaders/ray_tracer.wgsl?raw'
 import utilsSrc from './shaders/utils.wgsl?raw'
 import materialsSrc from './shaders/materials.wgsl?raw'
+import primitivesSrc from './shaders/primitives.wgsl?raw'
 
 export function createRayTracePipeline(device: GPUDevice) {
   const shaderSource = preprocessWGSL(rayTracerSrc, {
     utils: utilsSrc,
     materials: materialsSrc,
+    primitives: primitivesSrc,
   })
 
   const shaderModule = device.createShaderModule({
@@ -50,8 +52,20 @@ export function createRayTracePipeline(device: GPUDevice) {
         buffer: { type: 'read-only-storage' },
       },
       {
-        // scene_info
+        // boxes
         binding: 4,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' },
+      },
+      {
+        // planes
+        binding: 5,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' },
+      },
+      {
+        // scene_info
+        binding: 6,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: 'read-only-storage' },
       },

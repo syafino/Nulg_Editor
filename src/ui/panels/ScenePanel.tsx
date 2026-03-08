@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { MaterialType, type SceneSphere } from '@/scene/types'
+import { MaterialType, PrimitiveType, type ScenePrimitive, type SceneSphere, type SceneBox, type ScenePlane, type SceneMesh } from '@/scene/types'
 
 interface ScenePanelProps {
-  spheres: SceneSphere[]
-  onUpdate: (spheres: SceneSphere[]) => void
+  primitives: ScenePrimitive[]
+  onUpdate: (primitives: ScenePrimitive[]) => void
 }
 
 const MATERIAL_NAMES: Record<MaterialType, string> = {
@@ -11,6 +11,13 @@ const MATERIAL_NAMES: Record<MaterialType, string> = {
   [MaterialType.Metal]: 'Metal',
   [MaterialType.Dielectric]: 'Glass',
   [MaterialType.Emissive]: 'Emissive',
+}
+
+const PRIMITIVE_TYPE_NAMES: Record<PrimitiveType, string> = {
+  [PrimitiveType.Sphere]: 'Sphere',
+  [PrimitiveType.Box]: 'Box',
+  [PrimitiveType.Plane]: 'Plane',
+  [PrimitiveType.Mesh]: 'Mesh',
 }
 
 function ColorInput({ value, onChange }: { value: [number, number, number]; onChange: (c: [number, number, number]) => void }) {
@@ -93,99 +100,227 @@ function Vec3Input({
   )
 }
 
-export function ScenePanel({ spheres, onUpdate }: ScenePanelProps) {
+export function ScenePanel({ primitives, onUpdate }: ScenePanelProps) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
 
-  const updateSphere = (id: string, patch: Partial<SceneSphere>) => {
-    onUpdate(spheres.map((s) => (s.id === id ? { ...s, ...patch } : s)))
+  const updatePrimitive = (id: string, patch: Partial<ScenePrimitive>) => {
+    onUpdate(primitives.map((p) => (p.id === id ? { ...p, ...patch } : p)))
   }
 
-  const addSphere = () => {
-    const id = `sphere_${Date.now()}`
-    onUpdate([
-      ...spheres,
-      {
-        id,
-        name: 'New Sphere',
-        center: [0, 0.5, 0],
-        radius: 0.5,
-        albedo: [0.8, 0.3, 0.3],
-        materialType: MaterialType.Lambertian,
-        roughnessOrIor: 0,
-        emissionStrength: 0,
-      },
-    ])
+  const addPrimitive = (type: PrimitiveType) => {
+    const id = `${PRIMITIVE_TYPE_NAMES[type].toLowerCase()}_${Date.now()}`
+    let newPrimitive: ScenePrimitive
+
+    switch (type) {
+      case PrimitiveType.Sphere:
+        newPrimitive = {
+          id,
+          type: PrimitiveType.Sphere,
+          name: 'New Sphere',
+          center: [0, 0.5, 0],
+          radius: 0.5,
+          albedo: [0.8, 0.3, 0.3],
+          materialType: MaterialType.Lambertian,
+          roughnessOrIor: 0,
+          emissionStrength: 0,
+        } as SceneSphere
+        break
+      case PrimitiveType.Box:
+        newPrimitive = {
+          id,
+          type: PrimitiveType.Box,
+          name: 'New Box',
+          center: [0, 0.5, 0],
+          size: [1, 1, 1],
+          albedo: [0.8, 0.3, 0.3],
+          materialType: MaterialType.Lambertian,
+          roughnessOrIor: 0,
+          emissionStrength: 0,
+        } as SceneBox
+        break
+      case PrimitiveType.Plane:
+        newPrimitive = {
+          id,
+          type: PrimitiveType.Plane,
+          name: 'New Plane',
+          position: [0, 0, 0],
+          normal: [0, 1, 0],
+          albedo: [0.5, 0.5, 0.5],
+          materialType: MaterialType.Lambertian,
+          roughnessOrIor: 0,
+          emissionStrength: 0,
+        } as ScenePlane
+        break
+      case PrimitiveType.Mesh:
+        newPrimitive = {
+          id,
+          type: PrimitiveType.Mesh,
+          name: 'New Mesh',
+          vertices: [],
+          indices: [],
+          center: [0, 0.5, 0],
+          albedo: [0.8, 0.3, 0.3],
+          materialType: MaterialType.Lambertian,
+          roughnessOrIor: 0,
+          emissionStrength: 0,
+        } as SceneMesh
+        break
+    }
+
+    onUpdate([...primitives, newPrimitive])
     setSelected(id)
   }
 
-  const removeSphere = (id: string) => {
-    onUpdate(spheres.filter((s) => s.id !== id))
+  const removePrimitive = (id: string) => {
+    onUpdate(primitives.filter((p) => p.id !== id))
     if (selected === id) setSelected(null)
   }
 
-  const selectedSphere = spheres.find((s) => s.id === selected)
+  const selectedPrimitive = primitives.find((p) => p.id === selected)
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-2 border-b border-zinc-700">
         <h2 className="text-sm font-semibold text-zinc-200">Scene</h2>
-        <button
-          onClick={addSphere}
-          className="px-2 py-0.5 text-xs bg-blue-600 hover:bg-blue-500 rounded text-white"
-        >
-          + Add
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowAddMenu(!showAddMenu)}
+            className="px-2 py-0.5 text-xs bg-blue-600 hover:bg-blue-500 rounded text-white"
+          >
+            + Add
+          </button>
+          {showAddMenu && (
+            <div className="absolute right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded shadow-lg z-50">
+              {[PrimitiveType.Sphere, PrimitiveType.Box, PrimitiveType.Plane].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    addPrimitive(type)
+                    setShowAddMenu(false)
+                  }}
+                  className="block w-full px-3 py-1.5 text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 text-left"
+                >
+                  {PRIMITIVE_TYPE_NAMES[type]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Sphere list */}
+      {/* Primitive list */}
       <div className="flex-1 overflow-y-auto">
-        {spheres.map((s) => (
+        {primitives.map((p) => (
           <div
-            key={s.id}
-            onClick={() => setSelected(s.id)}
+            key={p.id}
+            onClick={() => setSelected(p.id)}
             className={`flex items-center justify-between px-2 py-1.5 cursor-pointer text-xs border-b border-zinc-800 ${
-              selected === s.id ? 'bg-zinc-700' : 'hover:bg-zinc-800'
+              selected === p.id ? 'bg-zinc-700' : 'hover:bg-zinc-800'
             }`}
           >
-            <span className="text-zinc-200">{s.name}</span>
-            <span className="text-zinc-500">{MATERIAL_NAMES[s.materialType]}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-zinc-500">{PRIMITIVE_TYPE_NAMES[p.type]}</span>
+              <span className="text-zinc-200">{p.name}</span>
+            </div>
+            <span className="text-zinc-500">{MATERIAL_NAMES[p.materialType]}</span>
           </div>
         ))}
       </div>
 
-      {/* Selected sphere editor */}
-      {selectedSphere && (
-        <div className="border-t border-zinc-700 p-2 space-y-2">
+      {/* Selected primitive editor */}
+      {selectedPrimitive && (
+        <div className="border-t border-zinc-700 p-2 space-y-2 overflow-y-auto max-h-96">
           <input
-            value={selectedSphere.name}
-            onChange={(e) => updateSphere(selectedSphere.id, { name: e.target.value })}
+            value={selectedPrimitive.name}
+            onChange={(e) => updatePrimitive(selectedPrimitive.id, { name: e.target.value })}
             className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-sm text-white"
           />
 
-          <Vec3Input
-            label="Pos"
-            value={selectedSphere.center}
-            onChange={(center) => updateSphere(selectedSphere.id, { center })}
-          />
+          {/* Sphere properties */}
+          {selectedPrimitive.type === PrimitiveType.Sphere && (
+            <>
+              <Vec3Input
+                label="Pos"
+                value={(selectedPrimitive as SceneSphere).center}
+                onChange={(center) => updatePrimitive(selectedPrimitive.id, { center })}
+              />
+              <NumberInput
+                label="Radius"
+                value={(selectedPrimitive as SceneSphere).radius}
+                onChange={(radius) => updatePrimitive(selectedPrimitive.id, { radius })}
+                step={0.1}
+                min={0.01}
+              />
+            </>
+          )}
 
-          <NumberInput
-            label="Radius"
-            value={selectedSphere.radius}
-            onChange={(radius) => updateSphere(selectedSphere.id, { radius })}
-            step={0.1}
-            min={0.01}
-          />
+          {/* Box properties */}
+          {selectedPrimitive.type === PrimitiveType.Box && (
+            <>
+              <Vec3Input
+                label="Pos"
+                value={(selectedPrimitive as SceneBox).center}
+                onChange={(center) => updatePrimitive(selectedPrimitive.id, { center })}
+              />
+              <Vec3Input
+                label="Size"
+                value={(selectedPrimitive as SceneBox).size}
+                onChange={(size) => updatePrimitive(selectedPrimitive.id, { size })}
+              />
+            </>
+          )}
 
+          {/* Plane properties */}
+          {selectedPrimitive.type === PrimitiveType.Plane && (
+            <>
+              <Vec3Input
+                label="Pos"
+                value={(selectedPrimitive as ScenePlane).position}
+                onChange={(position) => updatePrimitive(selectedPrimitive.id, { position })}
+              />
+              <Vec3Input
+                label="Normal"
+                value={(selectedPrimitive as ScenePlane).normal}
+                onChange={(normal) => {
+                  const len = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2)
+                  if (len > 0) {
+                    updatePrimitive(selectedPrimitive.id, {
+                      normal: [normal[0] / len, normal[1] / len, normal[2] / len],
+                    })
+                  }
+                }}
+              />
+            </>
+          )}
+
+          {/* Mesh properties */}
+          {selectedPrimitive.type === PrimitiveType.Mesh && (
+            <>
+              <Vec3Input
+                label="Pos"
+                value={(selectedPrimitive as SceneMesh).center}
+                onChange={(center) => updatePrimitive(selectedPrimitive.id, { center })}
+              />
+              <div className="text-xs text-zinc-500">
+                Vertices: {(selectedPrimitive as SceneMesh).vertices.length}
+                <br />
+                Triangles: {(selectedPrimitive as SceneMesh).indices.length / 3}
+              </div>
+            </>
+          )}
+
+          {/* Common material properties */}
           <div className="flex items-center gap-2 text-xs">
             <span className="w-12 text-zinc-400">Color</span>
             <ColorInput
-              value={selectedSphere.albedo}
-              onChange={(albedo) => updateSphere(selectedSphere.id, { albedo })}
+              value={selectedPrimitive.albedo}
+              onChange={(albedo) => updatePrimitive(selectedPrimitive.id, { albedo })}
             />
             <select
-              value={selectedSphere.materialType}
+              value={selectedPrimitive.materialType}
               onChange={(e) =>
-                updateSphere(selectedSphere.id, { materialType: parseInt(e.target.value) as MaterialType })
+                updatePrimitive(selectedPrimitive.id, { materialType: parseInt(e.target.value) as MaterialType })
               }
               className="flex-1 bg-zinc-800 border border-zinc-600 rounded px-1 py-0.5 text-white"
             >
@@ -197,40 +332,40 @@ export function ScenePanel({ spheres, onUpdate }: ScenePanelProps) {
             </select>
           </div>
 
-          {selectedSphere.materialType === MaterialType.Metal && (
+          {selectedPrimitive.materialType === MaterialType.Metal && (
             <NumberInput
               label="Rough"
-              value={selectedSphere.roughnessOrIor}
-              onChange={(roughnessOrIor) => updateSphere(selectedSphere.id, { roughnessOrIor })}
+              value={selectedPrimitive.roughnessOrIor}
+              onChange={(roughnessOrIor) => updatePrimitive(selectedPrimitive.id, { roughnessOrIor })}
               step={0.05}
               min={0}
               max={1}
             />
           )}
 
-          {selectedSphere.materialType === MaterialType.Dielectric && (
+          {selectedPrimitive.materialType === MaterialType.Dielectric && (
             <NumberInput
               label="IOR"
-              value={selectedSphere.roughnessOrIor}
-              onChange={(roughnessOrIor) => updateSphere(selectedSphere.id, { roughnessOrIor })}
+              value={selectedPrimitive.roughnessOrIor}
+              onChange={(roughnessOrIor) => updatePrimitive(selectedPrimitive.id, { roughnessOrIor })}
               step={0.05}
               min={1}
               max={3}
             />
           )}
 
-          {selectedSphere.materialType === MaterialType.Emissive && (
+          {selectedPrimitive.materialType === MaterialType.Emissive && (
             <NumberInput
               label="Power"
-              value={selectedSphere.emissionStrength}
-              onChange={(emissionStrength) => updateSphere(selectedSphere.id, { emissionStrength })}
+              value={selectedPrimitive.emissionStrength}
+              onChange={(emissionStrength) => updatePrimitive(selectedPrimitive.id, { emissionStrength })}
               step={0.5}
               min={0}
             />
           )}
 
           <button
-            onClick={() => removeSphere(selectedSphere.id)}
+            onClick={() => removePrimitive(selectedPrimitive.id)}
             className="w-full py-1 text-xs bg-red-900/50 hover:bg-red-800/50 rounded text-red-300"
           >
             Delete

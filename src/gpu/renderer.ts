@@ -10,13 +10,19 @@ import {
   ManagedBuffer,
   UNIFORM_BUFFER_SIZE,
   SPHERE_STRIDE,
+  BOX_STRIDE,
+  PLANE_STRIDE,
   writeUniforms,
   writeSpheres,
+  writeBoxes,
+  writePlanes,
   writeSceneInfo,
 } from './buffers'
-import type { UniformData, SphereData } from './buffers'
+import type { UniformData, SphereData, BoxData, PlaneData } from './buffers'
 
 const MAX_SPHERES = 128
+const MAX_BOXES = 64
+const MAX_PLANES = 64
 const WORKGROUP_SIZE = 8
 
 export interface RenderSettings {
@@ -41,6 +47,8 @@ export class PathTraceRenderer {
   // GPU resources
   private uniformBuffer: ManagedBuffer
   private sphereBuffer: ManagedBuffer
+  private boxBuffer: ManagedBuffer
+  private planeBuffer: ManagedBuffer
   private sceneInfoBuffer: ManagedBuffer
   private accumulationBuffer: ManagedBuffer | null = null
   private outputTexture: GPUTexture | null = null
@@ -55,6 +63,8 @@ export class PathTraceRenderer {
 
   // Scene data
   private spheres: SphereData[] = []
+  private boxes: BoxData[] = []
+  private planes: PlaneData[] = []
   private camera = {
     pos: [0, 1, 5] as [number, number, number],
     yaw: Math.PI,
@@ -100,6 +110,18 @@ export class PathTraceRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
 
+    this.boxBuffer = new ManagedBuffer(this.device, {
+      label: 'Boxes',
+      size: MAX_BOXES * BOX_STRIDE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+
+    this.planeBuffer = new ManagedBuffer(this.device, {
+      label: 'Planes',
+      size: MAX_PLANES * PLANE_STRIDE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
+
     this.sceneInfoBuffer = new ManagedBuffer(this.device, {
       label: 'SceneInfo',
       size: 16, // 4 x u32, 16-byte aligned
@@ -107,10 +129,20 @@ export class PathTraceRenderer {
     })
   }
 
-  setScene(spheres: SphereData[]) {
+  setScene(spheres: SphereData[], boxes: BoxData[] = [], planes: PlaneData[] = []) {
     this.spheres = spheres.slice(0, MAX_SPHERES)
+    this.boxes = boxes.slice(0, MAX_BOXES)
+    this.planes = planes.slice(0, MAX_PLANES)
+
     writeSpheres(this.sphereBuffer, this.spheres)
-    writeSceneInfo(this.sceneInfoBuffer, this.spheres.length)
+    writeBoxes(this.boxBuffer, this.boxes)
+    writePlanes(this.planeBuffer, this.planes)
+    writeSceneInfo(
+      this.sceneInfoBuffer,
+      this.spheres.length,
+      this.boxes.length,
+      this.planes.length,
+    )
     this.resetAccumulation()
   }
 
@@ -181,7 +213,9 @@ export class PathTraceRenderer {
         { binding: 1, resource: { buffer: this.accumulationBuffer.buffer } },
         { binding: 2, resource: { buffer: this.uniformBuffer.buffer } },
         { binding: 3, resource: { buffer: this.sphereBuffer.buffer } },
-        { binding: 4, resource: { buffer: this.sceneInfoBuffer.buffer } },
+        { binding: 4, resource: { buffer: this.boxBuffer.buffer } },
+        { binding: 5, resource: { buffer: this.planeBuffer.buffer } },
+        { binding: 6, resource: { buffer: this.sceneInfoBuffer.buffer } },
       ],
     })
 
@@ -302,6 +336,8 @@ export class PathTraceRenderer {
     this.stop()
     this.uniformBuffer.destroy()
     this.sphereBuffer.destroy()
+    this.boxBuffer.destroy()
+    this.planeBuffer.destroy()
     this.sceneInfoBuffer.destroy()
     this.accumulationBuffer?.destroy()
     this.outputTexture?.destroy()

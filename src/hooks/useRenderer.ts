@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import type { GPUContext } from '@/gpu/context'
 import { PathTraceRenderer, type RenderSettings } from '@/gpu/renderer'
-import type { SphereData } from '@/gpu/buffers'
-import type { SceneSphere } from '@/scene/types'
+import type { SphereData, BoxData, PlaneData } from '@/gpu/buffers'
+import { PrimitiveType, type ScenePrimitive, type SceneSphere, type SceneBox, type ScenePlane } from '@/scene/types'
 
 function sphereToGPU(s: SceneSphere): SphereData {
   return {
@@ -12,6 +12,28 @@ function sphereToGPU(s: SceneSphere): SphereData {
     materialType: s.materialType,
     roughnessOrIor: s.roughnessOrIor,
     emissionStrength: s.emissionStrength,
+  }
+}
+
+function boxToGPU(b: SceneBox): BoxData {
+  return {
+    center: b.center,
+    size: b.size,
+    albedo: b.albedo,
+    materialType: b.materialType,
+    roughnessOrIor: b.roughnessOrIor,
+    emissionStrength: b.emissionStrength,
+  }
+}
+
+function planeToGPU(p: ScenePlane): PlaneData {
+  return {
+    position: p.position,
+    normal: p.normal,
+    albedo: p.albedo,
+    materialType: p.materialType,
+    roughnessOrIor: p.roughnessOrIor,
+    emissionStrength: p.emissionStrength,
   }
 }
 
@@ -54,8 +76,15 @@ export function useRenderer(gpuCtx: GPUContext | null, canvas: HTMLCanvasElement
     }
   }, [gpuCtx, canvas])
 
-  const setScene = useCallback((spheres: SceneSphere[]) => {
-    rendererRef.current?.setScene(spheres.map(sphereToGPU))
+  const setScene = useCallback((primitives: ScenePrimitive[]) => {
+    const spheres = primitives.filter((p) => p.type === PrimitiveType.Sphere) as SceneSphere[]
+    const boxes = primitives.filter((p) => p.type === PrimitiveType.Box) as SceneBox[]
+    const planes = primitives.filter((p) => p.type === PrimitiveType.Plane) as ScenePlane[]
+    rendererRef.current?.setScene(
+      spheres.map(sphereToGPU),
+      boxes.map(boxToGPU),
+      planes.map(planeToGPU),
+    )
   }, [])
 
   const setCamera = useCallback(

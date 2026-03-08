@@ -158,8 +158,118 @@ export function writeSpheres(buffer: ManagedBuffer, spheres: SphereData[]) {
   buffer.write(f)
 }
 
-export function writeSceneInfo(buffer: ManagedBuffer, sphereCount: number) {
+/**
+ * Box buffer layout (each box = 64 bytes = 4 x vec4f, 16-byte aligned).
+ */
+export const BOX_STRIDE = 64 // 4 * 16 bytes
+
+export interface BoxData {
+  center: [number, number, number]
+  size: [number, number, number]
+  albedo: [number, number, number]
+  materialType: number
+  roughnessOrIor: number
+  emissionStrength: number
+}
+
+export function writeBoxes(buffer: ManagedBuffer, boxes: BoxData[]) {
+  const f = new Float32Array(boxes.length * (BOX_STRIDE / 4))
+
+  for (let i = 0; i < boxes.length; i++) {
+    const b = boxes[i]
+    const offset = i * 16 // 16 floats per box
+
+    // center (vec4f): xyz + pad
+    f[offset + 0] = b.center[0]
+    f[offset + 1] = b.center[1]
+    f[offset + 2] = b.center[2]
+    f[offset + 3] = 0
+
+    // size (vec4f): xyz + pad
+    f[offset + 4] = b.size[0]
+    f[offset + 5] = b.size[1]
+    f[offset + 6] = b.size[2]
+    f[offset + 7] = 0
+
+    // albedo (vec4f): xyz + material_type
+    f[offset + 8] = b.albedo[0]
+    f[offset + 9] = b.albedo[1]
+    f[offset + 10] = b.albedo[2]
+    f[offset + 11] = b.materialType
+
+    // properties (vec4f): roughness/ior, emission_strength, pad, pad
+    f[offset + 12] = b.roughnessOrIor
+    f[offset + 13] = b.emissionStrength
+    f[offset + 14] = 0
+    f[offset + 15] = 0
+  }
+
+  buffer.write(f)
+}
+
+/**
+ * Plane buffer layout (each plane = 64 bytes = 4 x vec4f, 16-byte aligned).
+ */
+export const PLANE_STRIDE = 64 // 4 * 16 bytes
+
+export interface PlaneData {
+  position: [number, number, number]
+  normal: [number, number, number]
+  albedo: [number, number, number]
+  materialType: number
+  roughnessOrIor: number
+  emissionStrength: number
+}
+
+export function writePlanes(buffer: ManagedBuffer, planes: PlaneData[]) {
+  const f = new Float32Array(planes.length * (PLANE_STRIDE / 4))
+
+  for (let i = 0; i < planes.length; i++) {
+    const p = planes[i]
+    const offset = i * 16 // 16 floats per plane
+
+    // position (vec4f): xyz + pad
+    f[offset + 0] = p.position[0]
+    f[offset + 1] = p.position[1]
+    f[offset + 2] = p.position[2]
+    f[offset + 3] = 0
+
+    // normal (vec4f): xyz + pad (normalized)
+    const nLen = Math.sqrt(p.normal[0] ** 2 + p.normal[1] ** 2 + p.normal[2] ** 2)
+    const nX = nLen > 0 ? p.normal[0] / nLen : p.normal[0]
+    const nY = nLen > 0 ? p.normal[1] / nLen : p.normal[1]
+    const nZ = nLen > 0 ? p.normal[2] / nLen : p.normal[2]
+    f[offset + 4] = nX
+    f[offset + 5] = nY
+    f[offset + 6] = nZ
+    f[offset + 7] = 0
+
+    // albedo (vec4f): xyz + material_type
+    f[offset + 8] = p.albedo[0]
+    f[offset + 9] = p.albedo[1]
+    f[offset + 10] = p.albedo[2]
+    f[offset + 11] = p.materialType
+
+    // properties (vec4f): roughness/ior, emission_strength, pad, pad
+    f[offset + 12] = p.roughnessOrIor
+    f[offset + 13] = p.emissionStrength
+    f[offset + 14] = 0
+    f[offset + 15] = 0
+  }
+
+  buffer.write(f)
+}
+
+export function writeSceneInfo(
+  buffer: ManagedBuffer,
+  sphereCount: number,
+  boxCount: number,
+  planeCount: number,
+) {
   const u = new Uint32Array(4) // 16 bytes aligned
   u[0] = sphereCount
+  u[1] = boxCount
+  u[2] = planeCount
+  u[3] = 0 // padding
   buffer.write(u)
 }

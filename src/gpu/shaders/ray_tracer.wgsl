@@ -24,40 +24,62 @@ struct Uniforms {
 
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
-// ─── Sphere Geometry (16-byte aligned) ───
+// ─── Geometry (16-byte aligned) ───
 struct Sphere {
     center:       vec4f,   // xyz = center, w = radius
     albedo:       vec4f,   // xyz = color, w = material_type (0=diffuse,1=metal,2=glass,3=emissive)
     properties:   vec4f,   // x = roughness/ior, y = emission_strength, z,w = unused
 }
 
-@group(0) @binding(3) var<storage, read> spheres: array<Sphere>;
-
-struct SceneInfo {
-    sphere_count: u32,
-    _pad0:        u32,
-    _pad1:        u32,
-    _pad2:        u32,
+struct Box {
+    center:       vec4f,   // xyz = center, w = unused
+    size:         vec4f,   // xyz = size (width, height, depth), w = unused
+    albedo:       vec4f,   // xyz = color, w = material_type
+    properties:   vec4f,   // x = roughness/ior, y = emission_strength, z,w = unused
 }
 
-@group(0) @binding(4) var<storage, read> scene_info: SceneInfo;
+struct Plane {
+    position:     vec4f,   // xyz = position, w = unused
+    normal:       vec4f,   // xyz = normal (normalized), w = unused
+    albedo:       vec4f,   // xyz = color, w = material_type
+    properties:   vec4f,   // x = roughness/ior, y = emission_strength, z,w = unused
+}
 
-// ─── Ray ───
+@group(0) @binding(3) var<storage, read> spheres: array<Sphere>;
+@group(0) @binding(4) var<storage, read> boxes: array<Box>;
+@group(0) @binding(5) var<storage, read> planes: array<Plane>;
+
+// ─── Scene Info (16-byte aligned) ───
+struct SceneInfo {
+    sphere_count: u32,
+    box_count:    u32,
+    plane_count:  u32,
+    _pad0:        u32,
+}
+
+@group(0) @binding(6) var<storage, read> scene_info: SceneInfo;
+
+// ─── Ray & Hit Record ───
 struct Ray {
-    origin:    vec3f,
-    direction: vec3f,
+    origin:       vec3f,
+    direction:    vec3f,
 }
 
 struct HitRecord {
-    point:      vec3f,
-    normal:     vec3f,
-    t:          f32,
-    front_face: bool,
-    sphere_idx: u32,
+    point:        vec3f,
+    normal:       vec3f,
+    t:            f32,
+    front_face:   bool,
+    primitive_id: u32,       // which sphere/box/plane index
+    material_type: u32,      // 0=diffuse, 1=metal, 2=glass, 3=emissive
+    albedo:       vec3f,
+    roughness_or_ior: f32,
+    emission_strength: f32,
 }
 
 #include "utils"
 #include "materials"
+#include "primitives"
 
 // ─── Sky Color ───
 fn sky_color(ray: Ray) -> vec3f {
@@ -100,6 +122,11 @@ fn hit_sphere(sphere: Sphere, ray: Ray, t_min: f32, t_max: f32, rec: ptr<functio
         (*rec).normal = -outward_normal;
     }
 
+    (*rec).material_type = u32(sphere.albedo.w);
+    (*rec).albedo = sphere.albedo.xyz;
+    (*rec).roughness_or_ior = sphere.properties.x;
+    (*rec).emission_strength = sphere.properties.y;
+
     return true;
 }
 
@@ -109,12 +136,42 @@ fn hit_scene(ray: Ray, t_min: f32, t_max: f32, rec: ptr<function, HitRecord>) ->
     var closest = t_max;
     var temp_rec: HitRecord;
 
-    let count = scene_info.sphere_count;
-    for (var i = 0u; i < count; i++) {
+    // Test spheres
+    for (var i = 0u; i < scene_info.sphere_count; i++) {
         if hit_sphere(spheres[i], ray, t_min, closest, &temp_rec) {
             hit_anything = true;
             closest = temp_rec.t;
-            temp_rec.sphere_idx = i;
+            temp_rec.primitive_id = i;
+            *rec = temp_rec;
+        }
+    }
+
+    // Test boxes
+    for (var i = 0u; i < scene_info.box_count; i++) {
+        let box = boxes[i];
+        if hit_box(box.center.xyz, box.size.xyz, ray, t_min, closest, &temp_rec) {
+            hit_anything = true;
+            closest = temp_rec.t;
+            temp_rec.primitive_id = i;
+            temp_rec.material_type = u32(box.albedo.w);
+            temp_rec.albedo = box.albedo.xyz;
+            temp_rec.roughness_or_ior = box.properties.x;
+            temp_rec.emission_strength = box.properties.y;
+            *rec = temp_rec;
+        }
+    }
+
+    // Test planes
+    for (var i = 0u; i < scene_info.plane_count; i++) {
+        let plane = planes[i];
+        if hit_plane(plane.position.xyz, plane.normal.xyz, ray, t_min, closest, &temp_rec) {
+            hit_anything = true;
+            closest = temp_rec.t;
+            temp_rec.primitive_id = i;
+            temp_rec.material_type = u32(plane.albedo.w);
+            temp_rec.albedo = plane.albedo.xyz;
+            temp_rec.roughness_or_ior = plane.properties.x;
+            temp_rec.emission_strength = plane.properties.y;
             *rec = temp_rec;
         }
     }
@@ -136,9 +193,8 @@ fn trace_ray(initial_ray: Ray, seed: ptr<function, u32>) -> vec3f {
             break;
         }
 
-        let sphere = spheres[rec.sphere_idx];
-        let material_type = u32(sphere.albedo.w);
-        let albedo = sphere.albedo.xyz;
+        let material_type = rec.material_type;
+        let albedo = rec.albedo;
 
         var scattered_dir: vec3f;
         var attenuation: vec3f;
@@ -149,15 +205,13 @@ fn trace_ray(initial_ray: Ray, seed: ptr<function, u32>) -> vec3f {
                 did_scatter = scatter_lambertian(rec.normal, seed, albedo, &scattered_dir, &attenuation);
             }
             case 1u: { // Metal
-                let roughness = sphere.properties.x;
-                did_scatter = scatter_metal(ray.direction, rec.normal, seed, albedo, roughness, &scattered_dir, &attenuation);
+                did_scatter = scatter_metal(ray.direction, rec.normal, seed, albedo, rec.roughness_or_ior, &scattered_dir, &attenuation);
             }
             case 2u: { // Dielectric
-                let ior = sphere.properties.x;
-                did_scatter = scatter_dielectric(ray.direction, rec.normal, rec.front_face, seed, ior, &scattered_dir, &attenuation);
+                did_scatter = scatter_dielectric(ray.direction, rec.normal, rec.front_face, seed, rec.roughness_or_ior, &scattered_dir, &attenuation);
             }
             case 3u: { // Emissive
-                let emission_strength = sphere.properties.y;
+                let emission_strength = rec.emission_strength;
                 light += color * albedo * emission_strength;
                 did_scatter = false;
             }
